@@ -65,13 +65,16 @@ def reduced_min_part_size(f):
 
 
 class MyModel(object):
-    def __init__(self, name, value):
+    def __init__(self, name, value, metadata={}):
         self.name = name
         self.value = value
+        self.metadata = metadata
 
     def save(self):
         s3 = boto3.client("s3", region_name=DEFAULT_REGION_NAME)
-        s3.put_object(Bucket="mybucket", Key=self.name, Body=self.value)
+        s3.put_object(
+            Bucket="mybucket", Key=self.name, Body=self.value, Metadata=self.metadata
+        )
 
 
 @mock_s3
@@ -131,6 +134,24 @@ def test_my_model_save():
     body = conn.Object("mybucket", "steve").get()["Body"].read().decode()
 
     assert body == "is awesome"
+
+
+@mock_s3
+def test_object_metadata():
+    """Metadata keys can contain certain special characters like dash and dot"""
+    # Create Bucket so that test can run
+    conn = boto3.resource("s3", region_name=DEFAULT_REGION_NAME)
+    conn.create_bucket(Bucket="mybucket")
+    ####################################
+
+    metadata = {"meta": "simple", "my-meta": "dash", "meta.data": "namespaced"}
+
+    model_instance = MyModel("steve", "is awesome", metadata=metadata)
+    model_instance.save()
+
+    meta = conn.Object("mybucket", "steve").get()["Metadata"]
+
+    assert meta == metadata
 
 
 @mock_s3
@@ -5013,10 +5034,10 @@ def test_get_unknown_version_should_throw_specific_error():
 
     with pytest.raises(ClientError) as e:
         client.get_object(Bucket=bucket_name, Key=object_key, VersionId="unknown")
-    e.value.response["Error"]["Code"].should.equal("InvalidArgument")
-    e.value.response["Error"]["Message"].should.equal("Invalid version id specified")
-    e.value.response["Error"]["ArgumentName"].should.equal("versionId")
-    e.value.response["Error"]["ArgumentValue"].should.equal("unknown")
+    e.value.response["Error"]["Code"].should.equal("NoSuchVersion")
+    e.value.response["Error"]["Message"].should.equal(
+        "The specified version does not exist."
+    )
 
 
 @mock_s3

@@ -161,7 +161,24 @@ class ELBV2Response(BaseResponse):
                 [e for e in _condition.items() if "values.member" in e[0]],
                 key=lambda x: x[0],
             )
-            condition["values"] = [e[1] for e in values]
+            condition["values"] = []
+            # fix: preserve original request dict items, instead of flattening everything into "values" list
+            from moto.config.models import snake_to_camels
+            for entry in values:
+                if entry[0].startswith('values.member'):
+                    condition["values"].append(entry[1])
+                else:
+                    prefix, _, foo = entry[0].partition('.')
+                    prefix = snake_to_camels(prefix, cap_start=False, cap_arn=False)
+                    condition[prefix] = condition.get(prefix) or {'values': []}
+                    if entry[0].endswith('._key'):
+                        condition[prefix]['values'].append({'Key': entry[1],
+                            'Value': _condition.get(entry[0].replace('._key', '._value'))})
+                    elif entry[0].endswith('._value'):
+                        pass  # skip, already covered above
+                    else:
+                        condition[prefix]['values'].append(entry[1])
+            # condition["values"] = [e[1] for e in values]
             conditions.append(condition)
         priority = self._get_int_param("Priority")
         actions = self._get_list_prefix("Actions.member")
@@ -188,6 +205,7 @@ class ELBV2Response(BaseResponse):
         healthy_threshold_count = self._get_param("HealthyThresholdCount")
         unhealthy_threshold_count = self._get_param("UnhealthyThresholdCount")
         matcher = self._get_param("Matcher")
+        target_type = self._get_param("TargetType")
 
         target_group = self.elbv2_backend.create_target_group(
             name,
@@ -202,6 +220,7 @@ class ELBV2Response(BaseResponse):
             healthy_threshold_count=healthy_threshold_count,
             unhealthy_threshold_count=unhealthy_threshold_count,
             matcher=matcher,
+            target_type=target_type,
         )
 
         template = self.response_template(CREATE_TARGET_GROUP_TEMPLATE)
@@ -706,7 +725,7 @@ CREATE_LOAD_BALANCER_TEMPLATE = """<CreateLoadBalancerResponse xmlns="http://ela
         </SecurityGroups>
         <DNSName>{{ load_balancer.dns_name }}</DNSName>
         <State>
-          <Code>provisioning</Code>
+          <Code>{{ load_balancer.state }}</Code>
         </State>
         <Type>application</Type>
       </member>
@@ -877,7 +896,7 @@ DESCRIBE_LOAD_BALANCERS_TEMPLATE = """<DescribeLoadBalancersResponse xmlns="http
         </SecurityGroups>
         <DNSName>{{ load_balancer.dns_name }}</DNSName>
         <State>
-          <Code>provisioning</Code>
+          <Code>{{ load_balancer.state }}</Code>
         </State>
         <Type>application</Type>
         <IpAddressType>ipv4</IpAddressType>

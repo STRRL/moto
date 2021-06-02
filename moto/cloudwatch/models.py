@@ -156,6 +156,8 @@ class FakeAlarm(BaseModel):
 
 
 def are_dimensions_same(metric_dimensions, dimensions):
+    if len(metric_dimensions) != len(dimensions):
+        return False
     for dimension in metric_dimensions:
         for new_dimension in dimensions:
             if (
@@ -163,12 +165,11 @@ def are_dimensions_same(metric_dimensions, dimensions):
                 or dimension.value != new_dimension.value
             ):
                 return False
-
     return True
 
 
 class MetricDatum(BaseModel):
-    def __init__(self, namespace, name, value, dimensions, timestamp):
+    def __init__(self, namespace, name, value, dimensions, timestamp, unit=None):
         self.namespace = namespace
         self.name = name
         self.value = value
@@ -176,17 +177,21 @@ class MetricDatum(BaseModel):
         self.dimensions = [
             Dimension(dimension["Name"], dimension["Value"]) for dimension in dimensions
         ]
+        self.unit = unit
 
-    def filter(self, namespace, name, dimensions, already_present_metrics):
+    def filter(self, namespace, name, dimensions, already_present_metrics=[]):
         if namespace and namespace != self.namespace:
             return False
         if name and name != self.name:
             return False
-        for metric in already_present_metrics:
-            if self.dimensions and are_dimensions_same(
-                metric.dimensions, self.dimensions
-            ):
-                return False
+
+        # Note: The logic below appears to be incorrect. We should not skip adding new Metrics
+        #       if a metric with the same dimensions has already been added to the list.
+        # for metric in already_present_metrics:
+        #     if self.dimensions and are_dimensions_same(
+        #         metric.dimensions, self.dimensions
+        #     ):
+        #         return False
 
         if dimensions and any(
             Dimension(d["Name"], d["Value"]) not in self.dimensions for d in dimensions
@@ -385,6 +390,7 @@ class CloudWatchBackend(BaseBackend):
                     float(metric_member.get("Value", 0)),
                     metric_member.get("Dimensions.member", _EMPTY_LIST),
                     timestamp,
+                    metric_member.get("Unit"),
                 )
             )
 
@@ -449,7 +455,7 @@ class CloudWatchBackend(BaseBackend):
         return results
 
     def get_metric_statistics(
-        self, namespace, metric_name, start_time, end_time, period, stats
+        self, namespace, metric_name, start_time, end_time, period, stats, unit=None, dimensions=None
     ):
         period_delta = timedelta(seconds=period)
         filtered_data = [
@@ -459,6 +465,11 @@ class CloudWatchBackend(BaseBackend):
             and md.name == metric_name
             and start_time <= md.timestamp <= end_time
         ]
+
+        if unit:
+            filtered_data = [md for md in filtered_data if md.unit == unit]
+        if dimensions:
+            filtered_data = [md for md in filtered_data if md.filter(None, None, dimensions)]
 
         # earliest to oldest
         filtered_data = sorted(filtered_data, key=lambda x: x.timestamp)

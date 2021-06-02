@@ -32,21 +32,24 @@ from .exceptions import (
     InvalidDocumentVersion,
     DuplicateDocumentVersionName,
     DuplicateDocumentContent,
+    ParameterMaxVersionLimitExceeded,
 )
+
+PARAMETER_VERSION_LIMIT = 100
 
 
 class Parameter(BaseModel):
     def __init__(
-        self,
-        name,
-        value,
-        type,
-        description,
-        allowed_pattern,
-        keyid,
-        last_modified_date,
-        version,
-        tags=None,
+            self,
+            name,
+            value,
+            type,
+            description,
+            allowed_pattern,
+            keyid,
+            last_modified_date,
+            version,
+            tags=None,
     ):
         self.name = name
         self.type = type
@@ -75,7 +78,7 @@ class Parameter(BaseModel):
 
         prefix = "kms:{}:".format(self.keyid or "default")
         if value.startswith(prefix):
-            return value[len(prefix) :]
+            return value[len(prefix):]
 
     def response_object(self, decrypt=False, region=None):
         r = {
@@ -126,9 +129,9 @@ def generate_ssm_doc_param_list(parameters):
         final_dict["Description"] = param_info["description"]
 
         if (
-            param_info["type"] == "StringList"
-            or param_info["type"] == "StringMap"
-            or param_info["type"] == "MapList"
+                param_info["type"] == "StringList"
+                or param_info["type"] == "StringMap"
+                or param_info["type"] == "MapList"
         ):
             final_dict["DefaultValue"] = json.dumps(param_info["default"])
         else:
@@ -141,17 +144,17 @@ def generate_ssm_doc_param_list(parameters):
 
 class Document(BaseModel):
     def __init__(
-        self,
-        name,
-        version_name,
-        content,
-        document_type,
-        document_format,
-        requires,
-        attachments,
-        target_type,
-        tags,
-        document_version="1",
+            self,
+            name,
+            version_name,
+            content,
+            document_type,
+            document_format,
+            requires,
+            attachments,
+            target_type,
+            tags,
+            document_version="1",
     ):
         self.name = name
         self.version_name = version_name
@@ -204,9 +207,9 @@ class Document(BaseModel):
             )
 
             if (
-                self.schema_version == "0.3"
-                or self.schema_version == "2.0"
-                or self.schema_version == "2.2"
+                    self.schema_version == "0.3"
+                    or self.schema_version == "2.0"
+                    or self.schema_version == "2.2"
             ):
                 self.mainSteps = content_json["mainSteps"]
             elif self.schema_version == "1.2":
@@ -218,21 +221,21 @@ class Document(BaseModel):
 
 class Command(BaseModel):
     def __init__(
-        self,
-        comment="",
-        document_name="",
-        timeout_seconds=MAX_TIMEOUT_SECONDS,
-        instance_ids=None,
-        max_concurrency="",
-        max_errors="",
-        notification_config=None,
-        output_s3_bucket_name="",
-        output_s3_key_prefix="",
-        output_s3_region="",
-        parameters=None,
-        service_role_arn="",
-        targets=None,
-        backend_region="us-east-1",
+            self,
+            comment="",
+            document_name="",
+            timeout_seconds=MAX_TIMEOUT_SECONDS,
+            instance_ids=None,
+            max_concurrency="",
+            max_errors="",
+            notification_config=None,
+            output_s3_bucket_name="",
+            output_s3_key_prefix="",
+            output_s3_region="",
+            parameters=None,
+            service_role_arn="",
+            targets=None,
+            backend_region="us-east-1",
     ):
 
         if instance_ids is None:
@@ -434,7 +437,7 @@ def _document_filter_list_includes_comparator(keyed_value_list, filter):
 def _document_filter_match(filters, ssm_doc):
     for filter in filters:
         if filter["Key"] == "Name" and not _document_filter_equal_comparator(
-            ssm_doc.name, filter
+                ssm_doc.name, filter
         ):
             return False
 
@@ -455,12 +458,12 @@ def _document_filter_match(filters, ssm_doc):
             return False
 
         elif filter["Key"] == "DocumentType" and not _document_filter_equal_comparator(
-            ssm_doc.document_type, filter
+                ssm_doc.document_type, filter
         ):
             return False
 
         elif filter["Key"] == "TargetType" and not _document_filter_equal_comparator(
-            ssm_doc.target_type, filter
+                ssm_doc.target_type, filter
         ):
             return False
 
@@ -565,16 +568,16 @@ class SimpleSystemManagerBackend(BaseBackend):
         return base
 
     def create_document(
-        self,
-        content,
-        requires,
-        attachments,
-        name,
-        version_name,
-        document_type,
-        document_format,
-        target_type,
-        tags,
+            self,
+            content,
+            requires,
+            attachments,
+            name,
+            version_name,
+            document_type,
+            document_format,
+            target_type,
+            tags,
     ):
         ssm_document = Document(
             name=name,
@@ -614,9 +617,9 @@ class SimpleSystemManagerBackend(BaseBackend):
             default_version = self._documents[name]["default_version"]
 
             if (
-                documents[default_version].document_type
-                == "ApplicationConfigurationSchema"
-                and not force
+                    documents[default_version].document_type
+                    == "ApplicationConfigurationSchema"
+                    and not force
             ):
                 raise InvalidDocumentOperation(
                     "You attempted to delete a document while it is still shared. "
@@ -634,9 +637,9 @@ class SimpleSystemManagerBackend(BaseBackend):
 
                 # we can't delete only the default version
                 if (
-                    delete_doc
-                    and delete_doc.document_version == default_version
-                    and len(documents) != 1
+                        delete_doc
+                        and delete_doc.document_version == default_version
+                        and len(documents) != 1
                 ):
                     raise InvalidDocumentOperation(
                         "Default version of the document can't be deleted."
@@ -667,7 +670,7 @@ class SimpleSystemManagerBackend(BaseBackend):
             raise InvalidDocument("The specified document does not exist.")
 
     def _find_document(
-        self, name, document_version=None, version_name=None, strict=True
+            self, name, document_version=None, version_name=None, strict=True
     ):
         if not self._documents.get(name):
             raise InvalidDocument("The specified document does not exist.")
@@ -683,8 +686,8 @@ class SimpleSystemManagerBackend(BaseBackend):
         elif version_name and document_version:
             for doc_version, document in documents.items():
                 if (
-                    doc_version == document_version
-                    and document.version_name == version_name
+                        doc_version == document_version
+                        and document.version_name == version_name
                 ):
                     ssm_document = document
                     break
@@ -728,14 +731,14 @@ class SimpleSystemManagerBackend(BaseBackend):
         return base
 
     def update_document(
-        self,
-        content,
-        attachments,
-        name,
-        version_name,
-        document_version,
-        document_format,
-        target_type,
+            self,
+            content,
+            attachments,
+            name,
+            version_name,
+            document_version,
+            document_format,
+            target_type,
     ):
         _validate_document_info(
             content=content,
@@ -748,14 +751,14 @@ class SimpleSystemManagerBackend(BaseBackend):
         if not self._documents.get(name):
             raise InvalidDocument("The specified document does not exist.")
         if (
-            self._documents[name]["latest_version"] != document_version
-            and document_version != "$LATEST"
+                self._documents[name]["latest_version"] != document_version
+                and document_version != "$LATEST"
         ):
             raise InvalidDocumentVersion(
                 "The document version is not valid or does not exist."
             )
         if version_name and self._find_document(
-            name, version_name=version_name, strict=False
+                name, version_name=version_name, strict=False
         ):
             raise DuplicateDocumentVersionName(
                 "The specified version name is a duplicate."
@@ -797,7 +800,7 @@ class SimpleSystemManagerBackend(BaseBackend):
         return self._generate_document_description(ssm_document)
 
     def list_documents(
-        self, document_filter_list, filters, max_results=10, next_token="0"
+            self, document_filter_list, filters, max_results=10, next_token="0"
     ):
         if document_filter_list:
             raise ValidationException(
@@ -1000,9 +1003,9 @@ class SimpleSystemManagerBackend(BaseBackend):
                             "When using global parameters, please specify within a global namespace."
                         )
                     if (
-                        "//" in value
-                        or not value.startswith("/")
-                        or not re.match("^[a-zA-Z0-9_.-/]*$", value)
+                            "//" in value
+                            or not value.startswith("/")
+                            or not re.match("^[a-zA-Z0-9_.-/]*$", value)
                     ):
                         raise ValidationException(
                             'The parameter doesn\'t meet the parameter name requirements. The parameter name must begin with a forward slash "/". '
@@ -1084,13 +1087,13 @@ class SimpleSystemManagerBackend(BaseBackend):
         return result
 
     def get_parameters_by_path(
-        self,
-        path,
-        with_decryption,
-        recursive,
-        filters=None,
-        next_token=None,
-        max_results=10,
+            self,
+            path,
+            with_decryption,
+            recursive,
+            filters=None,
+            next_token=None,
+            max_results=10,
     ):
         """Implement the get-parameters-by-path-API in the backend."""
 
@@ -1103,10 +1106,10 @@ class SimpleSystemManagerBackend(BaseBackend):
         for param_name in self._parameters:
             if path != "/" and not param_name.startswith(path):
                 continue
-            if "/" in param_name[len(path) + 1 :] and not recursive:
+            if "/" in param_name[len(path) + 1:] and not recursive:
                 continue
             if not self._match_filters(
-                self.get_parameter(param_name, with_decryption), filters
+                    self.get_parameter(param_name, with_decryption), filters
             ):
                 continue
             result.append(self.get_parameter(param_name, with_decryption))
@@ -1118,7 +1121,7 @@ class SimpleSystemManagerBackend(BaseBackend):
             next_token = 0
         next_token = int(next_token)
         max_results = int(max_results)
-        values = values_list[next_token : next_token + max_results]
+        values = values_list[next_token: next_token + max_results]
         if len(values) == max_results:
             next_token = str(next_token + max_results)
         else:
@@ -1163,7 +1166,7 @@ class SimpleSystemManagerBackend(BaseBackend):
             if what is None:
                 return False
             elif option == "BeginsWith" and not any(
-                what.startswith(value) for value in values
+                    what.startswith(value) for value in values
             ):
                 return False
             elif option == "Contains" and not any(value in what for value in values):
@@ -1174,10 +1177,10 @@ class SimpleSystemManagerBackend(BaseBackend):
                 if any(value == "/" and len(what.split("/")) == 2 for value in values):
                     continue
                 elif any(
-                    value != "/"
-                    and what.startswith(value + "/")
-                    and len(what.split("/")) - 1 == len(value.split("/"))
-                    for value in values
+                        value != "/"
+                        and what.startswith(value + "/")
+                        and len(what.split("/")) - 1 == len(value.split("/"))
+                        for value in values
                 ):
                     continue
                 else:
@@ -1249,10 +1252,10 @@ class SimpleSystemManagerBackend(BaseBackend):
         invalid_labels = []
         for label in labels:
             if (
-                label.startswith("aws")
-                or label.startswith("ssm")
-                or label[:1].isdigit()
-                or not re.match(r"^[a-zA-z0-9_\.\-]*$", label)
+                    label.startswith("aws")
+                    or label.startswith("ssm")
+                    or label[:1].isdigit()
+                    or not re.match(r"^[a-zA-z0-9_\.\-]*$", label)
             ):
                 invalid_labels.append(label)
                 continue
@@ -1281,8 +1284,20 @@ class SimpleSystemManagerBackend(BaseBackend):
                         parameter.labels.remove(label)
         return [invalid_labels, version]
 
+    def _check_for_parameter_version_limit_exception(self, name):
+        # https://docs.aws.amazon.com/systems-manager/latest/userguide/sysman-paramstore-versions.html
+        parameter_versions = self._parameters[name]
+        oldest_parameter = parameter_versions[0]
+        if oldest_parameter.labels:
+            raise ParameterMaxVersionLimitExceeded(
+                "You attempted to create a new version of %s by calling the PutParameter API "
+                "with the overwrite flag. Version %d, the oldest version, can't be deleted "
+                "because it has a label associated with it. Move the label to another version "
+                "of the parameter, and try again." % (name, oldest_parameter.version)
+            )
+
     def put_parameter(
-        self, name, description, value, type, allowed_pattern, keyid, overwrite, tags,
+            self, name, description, value, type, allowed_pattern, keyid, overwrite, tags,
     ):
         if not value:
             raise ValidationException(
@@ -1290,7 +1305,7 @@ class SimpleSystemManagerBackend(BaseBackend):
                 " constraint: Member must have length greater than or equal to 1."
             )
         if name.lower().lstrip("/").startswith("aws") or name.lower().lstrip(
-            "/"
+                "/"
         ).startswith("ssm"):
             is_path = name.count("/") > 1
             if name.lower().startswith("/aws") and is_path:
@@ -1317,6 +1332,10 @@ class SimpleSystemManagerBackend(BaseBackend):
             if not overwrite:
                 return
 
+            if len(previous_parameter_versions) >= PARAMETER_VERSION_LIMIT:
+                self._check_for_parameter_version_limit_exception(name)
+                previous_parameter_versions.pop(0)
+
         last_modified_date = time.time()
         self._parameters[name].append(
             Parameter(
@@ -1331,6 +1350,11 @@ class SimpleSystemManagerBackend(BaseBackend):
                 tags or [],
             )
         )
+
+        if tags:
+            tags = {t["Key"]: t["Value"] for t in tags}
+            self.add_tags_to_resource(name, "Parameter", tags)
+
         return version
 
     def add_tags_to_resource(self, resource_type, resource_id, tags):

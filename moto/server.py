@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 import argparse
 import io
 import json
+import os
 import re
 import signal
 import sys
@@ -262,7 +263,7 @@ def main(argv=sys.argv[1:]):
         "service",
         type=str,
         nargs="?",  # http://stackoverflow.com/a/4480202/731592
-        default=None,
+        default=os.environ.get("MOTO_SERVICE"),
     )
     parser.add_argument(
         "-H", "--host", type=str, help="Which host to bind", default="127.0.0.1"
@@ -293,8 +294,9 @@ def main(argv=sys.argv[1:]):
 
     args = parser.parse_args(argv)
 
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    # comment out, to avoid error: "signal only works in main thread"
+    # signal.signal(signal.SIGINT, signal_handler)
+    # signal.signal(signal.SIGTERM, signal_handler)
 
     # Wrap the main application
     main_app = DomainDispatcherApplication(create_backend_app, service=args.service)

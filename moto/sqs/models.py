@@ -70,7 +70,7 @@ DEDUPLICATION_TIME_IN_SECONDS = 300
 
 
 class Message(BaseModel):
-    def __init__(self, message_id, body):
+    def __init__(self, message_id, body, system_attributes={}):
         self.id = message_id
         self._body = body
         self.message_attributes = {}
@@ -84,6 +84,7 @@ class Message(BaseModel):
         self.sequence_number = None
         self.visible_at = 0
         self.delayed_until = 0
+        self.system_attributes = system_attributes
 
     @property
     def body_md5(self):
@@ -477,6 +478,7 @@ class Queue(CloudFormationModel):
 
     @property
     def messages(self):
+        # TODO: This can become very inefficient if a large number of messages are in-flight
         return [
             message
             for message in self._messages
@@ -673,6 +675,7 @@ class SQSBackend(BaseBackend):
         delay_seconds=None,
         deduplication_id=None,
         group_id=None,
+        system_attributes=None,
     ):
 
         queue = self.get_queue(queue_name)
@@ -689,7 +692,7 @@ class SQSBackend(BaseBackend):
             delay_seconds = queue.delay_seconds
 
         message_id = get_random_message_id()
-        message = Message(message_id, message_body)
+        message = Message(message_id, message_body, system_attributes)
 
         # if content based deduplication is set then set sha256 hash of the message
         # as the deduplication_id
@@ -824,7 +827,7 @@ class SQSBackend(BaseBackend):
                         continue
 
                 if (
-                    queue.dead_letter_queue is not None
+                    queue.dead_letter_queue is not None and queue.redrive_policy
                     and message.approximate_receive_count
                     >= queue.redrive_policy["maxReceiveCount"]
                 ):
@@ -834,7 +837,9 @@ class SQSBackend(BaseBackend):
                 queue.pending_messages.add(message)
                 message.mark_received(visibility_timeout=visibility_timeout)
                 _filter_message_attributes(message, message_attribute_names)
-                if not self.is_message_valid_based_on_retention_period(queue_name):
+                if not self.is_message_valid_based_on_retention_period(
+                    queue_name, message
+                ):
                     break
                 result.append(message)
                 if len(result) >= count:
@@ -883,6 +888,17 @@ class SQSBackend(BaseBackend):
             if message.receipt_handle == receipt_handle:
                 if message.visible:
                     raise MessageNotInflight
+
+                visibility_timeout_msec = int(visibility_timeout) * 1000
+                given_visibility_timeout = unix_time_millis() + visibility_timeout_msec
+                if given_visibility_timeout - message.sent_timestamp > 43200 * 1000:
+                    raise InvalidParameterValue(
+                        "Value {0} for parameter VisibilityTimeout is invalid. Reason: Total "
+                        "VisibilityTimeout for the message is beyond the limit [43200 seconds]".format(
+                            visibility_timeout
+                        )
+                    )
+
                 message.change_visibility(visibility_timeout)
                 if message.visible:
                     # If the message is visible again, remove it from pending
@@ -1013,11 +1029,12 @@ class SQSBackend(BaseBackend):
     def list_queue_tags(self, queue_name):
         return self.get_queue(queue_name)
 
-    def is_message_valid_based_on_retention_period(self, queue_name):
+    def is_message_valid_based_on_retention_period(self, queue_name, message):
         message_attributes = self.get_queue_attributes(queue_name, [])
-        retain_until = message_attributes.get(
-            "MessageRetentionPeriod"
-        ) + message_attributes.get("CreatedTimestamp")
+        retain_until = (
+            message_attributes.get("MessageRetentionPeriod")
+            + message.sent_timestamp / 1000
+        )
         if retain_until <= unix_time():
             return False
         return True

@@ -381,6 +381,7 @@ class FakeLoadBalancer(CloudFormationModel):
         vpc_id,
         arn,
         dns_name,
+        state,
         scheme="internet-facing",
     ):
         self.name = name
@@ -393,6 +394,7 @@ class FakeLoadBalancer(CloudFormationModel):
         self.tags = {}
         self.arn = arn
         self.dns_name = dns_name
+        self.state = state
 
         self.stack = "ipv4"
         self.attrs = {
@@ -418,6 +420,10 @@ class FakeLoadBalancer(CloudFormationModel):
     def remove_tag(self, key):
         if key in self.tags:
             del self.tags[key]
+
+    def activate(self):
+        if self.state == "provisioning":
+            self.state = "active"
 
     def delete(self, region):
         """ Not exposed as part of the ELB API - used for CloudFormation. """
@@ -517,6 +523,8 @@ class ELBv2Backend(BaseBackend):
     ):
         vpc_id = None
         subnets = []
+        state = "provisioning"
+
         if not subnet_ids:
             raise SubnetNotFoundError()
         for subnet_id in subnet_ids:
@@ -542,6 +550,7 @@ class ELBv2Backend(BaseBackend):
             subnets=subnets,
             vpc_id=vpc_id,
             dns_name=dns_name,
+            state=state,
         )
         self.load_balancers[arn] = new_load_balancer
         return new_load_balancer
@@ -556,13 +565,11 @@ class ELBv2Backend(BaseBackend):
         # validate conditions
         for condition in conditions:
             field = condition["field"]
-            if field not in ["path-pattern", "host-header"]:
+            if field not in InvalidConditionFieldError.VALID_FIELDS:
                 raise InvalidConditionFieldError(field)
 
-            values = condition["values"]
-            if len(values) == 0:
-                raise InvalidConditionValueError("A condition value must be specified")
-            if len(values) > 1:
+            values = condition.get("values", [])
+            if len(values) > 1 and field in ["path-pattern"]:
                 raise InvalidConditionValueError(
                     "The '%s' field contains too many values; the limit is '1'" % field
                 )
@@ -740,6 +747,8 @@ Member must satisfy regular expression pattern: {}".format(
         arns = arns or []
         names = names or []
         if not arns and not names:
+            for balancer in balancers:
+                balancer.activate()
             return balancers
 
         matched_balancers = []
@@ -747,6 +756,7 @@ Member must satisfy regular expression pattern: {}".format(
 
         for arn in arns:
             for balancer in balancers:
+                balancer.activate()
                 if balancer.arn == arn:
                     matched_balancer = balancer
             if matched_balancer is None:
@@ -756,6 +766,7 @@ Member must satisfy regular expression pattern: {}".format(
 
         for name in names:
             for balancer in balancers:
+                balancer.activate()
                 if balancer.name == name:
                     matched_balancer = balancer
             if matched_balancer is None:
