@@ -166,7 +166,7 @@ class Document(BaseModel):
         self.status = "Active"
         self.document_version = document_version
         self.owner = ACCOUNT_ID
-        self.created_date = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        self.created_date = int(time.time())
 
         if document_format == "JSON":
             try:
